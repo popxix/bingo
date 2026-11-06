@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bingo</title>
+<style>
+  :root{
+    --bg1:#1d2255; --bg2:#0d1030;
+    --gold:#ffc93c; --ink:#f4f6ff; --muted:#9aa3d6;
+    --cell:#ffffff; --gap:1.1vmin; --radius:1.2vmin;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;overflow:hidden}
+  body{
+    background:radial-gradient(120% 120% at 50% 0%,var(--bg1),var(--bg2));
+    color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex;flex-direction:column;height:100vh;height:100dvh;
+    user-select:none;-webkit-user-select:none;
+  }
+
+  /* ---------- top bar ---------- */
+  .bar{
+    flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:1vmin;
+    padding:1vmin 2vmin;min-height:7vmin;
+    font-size:clamp(12px,2.2vmin,22px);
+  }
+  .bar h1{margin:0;font-size:1.35em;letter-spacing:.02em;font-weight:700;white-space:nowrap}
+  .count{
+    margin-left:.4em;padding:.25em .8em;border-radius:99px;
+    background:rgba(255,255,255,.10);color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap
+  }
+  .count b{color:var(--gold)}
+  .spacer{flex:1}
+  .latest-name{margin-left:.6em;font-weight:600;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:32vw}
+  .latest-name:empty{display:none}
+  button{
+    font:inherit;font-weight:600;cursor:pointer;color:var(--ink);
+    background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);
+    border-radius:.7em;padding:.45em .9em;white-space:nowrap;
+    transition:background .15s,transform .05s;
+  }
+  button:hover{background:rgba(255,255,255,.2)}
+  button:active{transform:translateY(1px)}
+  button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+  button.primary{background:var(--gold);color:#241a00;border-color:transparent;font-size:1.1em;padding:.45em 1.4em}
+  button.primary:hover{background:#ffd75f}
+  button[aria-pressed="true"]{background:rgba(255,201,60,.22);border-color:var(--gold)}
+  kbd{font:inherit;font-size:.78em;opacity:.7;margin-left:.45em;padding:0 .4em;border:1px solid currentColor;border-radius:.35em}
+
+  /* ---------- board ---------- */
+  .board-wrap{flex:1 1 0;min-height:0;padding:0 2vmin 2vmin}
+  .board{
+    width:100%;height:100%;display:grid;gap:var(--gap);
+    grid-template-columns:repeat(var(--cols,7),1fr);
+    grid-template-rows:repeat(var(--rows,5),1fr);
+  }
+  .slot{
+    position:relative;min-width:0;min-height:0;border-radius:var(--radius);
+    border:.25vmin dashed rgba(255,255,255,.16);background:rgba(255,255,255,.04);
+    display:flex;align-items:center;justify-content:center;
+    color:rgba(255,255,255,.18);font-weight:700;font-size:clamp(14px,4vmin,48px);
+    font-variant-numeric:tabular-nums;
+  }
+  .slot.filled{border:none;background:var(--cell);box-shadow:0 .4vmin 1.4vmin rgba(0,0,0,.35);color:transparent}
+  .slot img{width:100%;height:100%;object-fit:contain;padding:.6vmin;display:none}
+  .slot.filled img{display:block}
+  .slot.filled.hidden img{visibility:hidden}
+  .slot.latest{
+    outline:.6vmin solid var(--gold);outline-offset:.15vmin;z-index:1;
+    animation:glow 1.6s ease-in-out infinite;
+  }
+  @keyframes glow{50%{box-shadow:0 0 2.6vmin .5vmin rgba(255,201,60,.65)}}
+
+  /* ---------- spotlight (big reveal) ---------- */
+  .spot{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .spot .dim{position:absolute;inset:0;background:rgba(6,8,28,.72);animation:fade .25s ease-out}
+  .spot .card{
+    position:relative;background:#fff;border-radius:2.2vmin;padding:1.6vmin;
+    box-shadow:0 2vmin 8vmin rgba(0,0,0,.6);
+    animation:pop .4s cubic-bezier(.2,1.3,.4,1);
+  }
+  .spot .card img{display:block;height:min(74vh,74vw);max-width:86vw;width:auto;object-fit:contain}
+  @keyframes fade{from{opacity:0}}
+  @keyframes pop{from{transform:scale(.6);opacity:0}}
+
+  /* ---------- dialogs / toasts ---------- */
+  .modal{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:rgba(6,8,28,.7)}
+  .modal.open{display:flex}
+  .dialog{background:#242a66;border:1px solid rgba(255,255,255,.2);border-radius:2vmin;padding:3vmin 4vmin;text-align:center;font-size:clamp(14px,2.6vmin,28px);max-width:90vw}
+  .dialog p{margin:0 0 1.6em}
+  .dialog .row{display:flex;gap:1.2em;justify-content:center}
+  .toast{
+    position:fixed;left:50%;bottom:3vmin;transform:translateX(-50%);z-index:25;
+    background:rgba(0,0,0,.8);padding:.6em 1.2em;border-radius:99px;font-size:clamp(13px,2.4vmin,26px);
+    opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap
+  }
+  .toast.show{opacity:1}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+  /* kiosk mode: hide bar */
+  body.kiosk .bar{display:none}
+  body.kiosk .board-wrap{padding-top:2vmin}
+
+  /* narrow embeds: compact bar */
+  @media (max-width:1100px){
+    kbd{display:none}
+  }
+  @media (max-width:900px){
+    .latest-name{display:none}
+    .spacer{flex-basis:100%;height:0}
+  }
+  @media (max-width:640px){
+    .bar h1{display:none}
+    .spacer{display:none}
+    .bar{justify-content:center}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .slot.latest{animation:none}
+    .spot .card,.spot .dim{animation:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="bar" id="bar">
+  <h1 id="title">Bingo</h1>
+  <span class="count" id="count" aria-hidden="true"><b>0</b> / 35</span>
+  <span class="latest-name" id="latestName" aria-hidden="true"></span>
+  <span class="spacer"></span>
+  <button id="btnUndo" title="Undo last (Backspace)">Undo<kbd>⌫</kbd></button>
+  <button id="btnSpot" aria-pressed="true" title="Big reveal on/off (S)">Big reveal<kbd>S</kbd></button>
+  <button id="btnFs" title="Fullscreen (F)">Fullscreen<kbd>F</kbd></button>
+  <button id="btnHide" title="Hide this bar (H)">Hide bar<kbd>H</kbd></button>
+  <button id="btnReset" title="New game (R)">New game<kbd>R</kbd></button>
+  <button id="btnNext" class="primary" title="Next image (Space / Enter / →)">Next image<kbd>Space</kbd></button>
+</header>
+
+<main class="board-wrap" id="wrap">
+  <div class="board" id="board" aria-label="Bingo collage"></div>
+</main>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Start a new game?">
+  <div class="dialog">
+    <p>Start a new game?<br><small style="opacity:.7">The collage will be cleared and reshuffled.</small></p>
+    <div class="row">
+      <button id="mCancel">Cancel <kbd>Esc</kbd></button>
+      <button id="mOk" class="primary">New game <kbd>Enter</kbd></button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<div class="sr" id="live" aria-live="polite"></div>
+
+<script>
+/* ================== CONFIG – edit here ================== */
+const TITLE = "Bingo";   // text in the top bar (or add ?title=My+Game to the URL)
+const SPOTLIGHT_MS = 2800;       // how long the big reveal stays before flying into the collage
+const IMAGES = [                 // file in /images  +  name read aloud for screen readers
+  ["a-sister-and-children","A sister and children"],
+  ["altar-servers","Altar servers"],
+  ["baptism","Baptism"],
+  ["bible","Bible"],
+  ["blessed-virgin-mary","Blessed Virgin Mary"],
+  ["candle","Candle"],
+  ["chalice","Chalice"],
+  ["church","Church"],
+  ["crucifix","Crucifix"],
+  ["divine-mercy-jesus","Divine Mercy Jesus"],
+  ["holy-spirit","Holy Spirit"],
+  ["hosts","Hosts"],
+  ["immaculate-heart-of-mary","Immaculate Heart of Mary"],
+  ["jesus-and-children","Jesus and children"],
+  ["monstrance","Monstrance"],
+  ["praying","Praying"],
+  ["priest","Priest"],
+  ["rosary","Rosary"],
+  ["sacred-heart-of-jesus","Sacred Heart of Jesus"],
+  ["st-dymphna","St. Dymphna"],
+  ["st-gianna-molla","St. Gianna Molla"],
+  ["st-joan-of-arc","St. Joan of Arc"],
+  ["st-joseph","St. Joseph"],
+  ["st-josephine-bakhita","St. Josephine Bakhita"],
+  ["st-kateri-tekakwitha","St. Kateri Tekakwitha"],
+  ["st-martin-de-porres","St. Martin de Porres"],
+  ["st-maximilian-kolbe","St. Maximilian Kolbe"],
+  ["st-michael","St. Michael"],
+  ["st-monica","St. Monica"],
+  ["st-nicholas","St. Nicholas"],
+  ["st-padre-pio","St. Padre Pio"],
+  ["st-patrick","St. Patrick"],
+  ["st-teresa-of-calcutta","St. Teresa of Calcutta"],
+  ["st-thomas-aquinas","St. Thomas Aquinas"],
+  ["stained-glass-window","Stained glass window"]
+];
+/* ======================================================== */
+
+const N = IMAGES.length;
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const board = $("board"), wrap = $("wrap");
+let spotlightOn = params.get("spotlight") !== "0";
+let order = [], shown = 0, pending = null;
+
+/* ---- title ---- */
+const title = params.get("title") || TITLE;
+$("title").textContent = title; document.title = title;
+
+/* ---- storage (safe: may be blocked inside embeds) ---- */
+const KEY = "bingo-collage-v1";
+const store = {
+  get(){ try { return JSON.parse(localStorage.getItem(KEY)); } catch(e){ return null; } },
+  set(v){ try { localStorage.setItem(KEY, JSON.stringify(v)); } catch(e){} }
+};
+
+/* ---- random shuffle (crypto-grade, Fisher–Yates) ---- */
+function rnd(n){
+  if (window.crypto && crypto.getRandomValues){
+    const lim = Math.floor(4294967296 / n) * n, b = new Uint32Array(1);
+    do { crypto.getRandomValues(b); } while (b[0] >= lim);
+    return b[0] % n;
+  }
+  return Math.floor(Math.random() * n);
+}
+function shuffled(){
+  const a = [...Array(N).keys()];
+  for (let i = N - 1; i > 0; i--){ const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+/* ---- build the 35 slots ---- */
+const slots = [];
+for (let i = 0; i < N; i++){
+  const s = document.createElement("div"); s.className = "slot"; s.textContent = i + 1;
+  const img = document.createElement("img"); img.alt = ""; img.draggable = false; img.decoding = "async";
+  s.appendChild(img); board.appendChild(s); slots.push(s);
+}
+const src = k => "images/" + IMAGES[k][0] + ".png";
+
+function fillSlot(i, withLatest){
+  const s = slots[i], k = order[i], img = s.querySelector("img");
+  img.src = src(k); img.alt = IMAGES[k][1];
+  s.classList.add("filled"); s.classList.remove("hidden");
+  s.firstChild.nodeType === 3 && (s.firstChild.nodeValue = "");
+  if (withLatest) markLatest(i);
+}
+function clearSlot(i){
+  const s = slots[i]; s.classList.remove("filled","latest","hidden");
+  s.querySelector("img").removeAttribute("src"); s.firstChild.nodeValue = i + 1;
+}
+function markLatest(i){
+  slots.forEach(s => s.classList.remove("latest"));
+  if (i >= 0 && i < N){ slots[i].classList.add("latest"); $("latestName").textContent = "Latest: " + IMAGES[order[i]][1]; }
+  else $("latestName").textContent = "";
+}
+
+/* ---- layout: pick 7×5 or 5×7 (always exactly 35 cells) to give the biggest pictures ---- */
+function layout(){
+  const w = wrap.clientWidth - 0, h = wrap.clientHeight;
+  const AR = 0.95;                       // typical picture aspect (w/h)
+  const score = (c, r) => Math.min(h / r, (w / c) / AR);
+  const options = (N === 35) ? [[7,5],[5,7]] : (() => {
+    const o = []; for (let c = 3; c <= 10; c++) o.push([c, Math.ceil(N / c)]); return o; })();
+  let best = options[0];
+  for (const o of options) if (score(...o) > score(...best)) best = o;
+  board.style.setProperty("--cols", best[0]); board.style.setProperty("--rows", best[1]);
+}
+new ResizeObserver(layout).observe(wrap); addEventListener("resize", layout);
+
+/* ---- UI helpers ---- */
+function updateUI(){
+  $("count").innerHTML = "<b>" + shown + "</b> / " + N;
+  const done = shown >= N;
+  $("btnNext").firstChild.nodeValue = done ? "New game" : "Next image";
+  $("btnUndo").disabled = shown === 0;
+  $("btnUndo").style.opacity = shown === 0 ? .4 : 1;
+}
+let toastT;
+function toast(msg){
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2200);
+}
+const save = () => store.set({ order, shown });
+
+/* ---- big reveal ---- */
+function runSpotlight(i, done){
+  const k = order[i], cell = slots[i];
+  let finished = false, t1 = null, t2 = null, spot = null;
+  function finish(){
+    if (finished) return; finished = true; clearTimeout(t1); clearTimeout(t2);
+    if (spot) spot.remove();
+    cell.classList.remove("hidden");          // the cell can never stay blank
+    pending = null; done && done();
+  }
+  pending = { finish };
+  try {
+    spot = document.createElement("div"); spot.className = "spot";
+    spot.innerHTML = '<div class="dim"></div><div class="card"><img alt=""></div>';
+    const img = spot.querySelector("img"); img.src = src(k); img.alt = IMAGES[k][1];
+    document.body.appendChild(spot);
+    const card = spot.querySelector(".card"), dim = spot.querySelector(".dim");
+    function fly(){
+      if (finished) return;
+      if (!card.animate){ finish(); return; }
+      const a = card.getBoundingClientRect(), b = cell.getBoundingClientRect();
+      const sc = Math.min(b.width / a.width, b.height / a.height);
+      const dx = (b.left + b.width / 2) - (a.left + a.width / 2);
+      const dy = (b.top + b.height / 2) - (a.top + a.height / 2);
+      const opt = { duration: 650, easing: "cubic-bezier(.5,0,.2,1)", fill: "forwards" };
+      dim.animate([{ opacity: 1 }, { opacity: 0 }], opt);
+      const an = card.animate([{ transform: "none" }, { transform: `translate(${dx}px,${dy}px) scale(${sc})` }], opt);
+      an.onfinish = finish; an.oncancel = finish;
+      t2 = setTimeout(finish, 1500);            // safety net if onfinish never fires
+    }
+    const start = () => { if (!finished && !t1) t1 = setTimeout(fly, SPOTLIGHT_MS); };
+    (img.decode ? img.decode().catch(() => {}) : Promise.resolve()).then(start);
+    setTimeout(start, 1500);                    // don't wait forever for a slow image
+  } catch (err) { finish(); }
+}
+
+/* ---- actions ---- */
+function next(){
+  if (pending) pending.finish();
+  if (shown >= N){ askReset(true); return; }
+  const i = shown++;
+  fillSlot(i, true);
+  const name = IMAGES[order[i]][1];
+  $("live").textContent = "Image " + shown + " of " + N + ": " + name;
+  if (spotlightOn){ slots[i].classList.add("hidden"); runSpotlight(i); }
+  updateUI(); save();
+}
+function undo(){
+  if (pending) pending.finish();
+  if (shown === 0) return;
+  clearSlot(--shown);
+  markLatest(shown - 1);
+  updateUI(); save();
+}
+function resetGame(){
+  if (pending) pending.finish();
+  order = shuffled(); shown = 0;
+  slots.forEach((_, i) => clearSlot(i));
+  $("latestName").textContent = "";
+  updateUI(); save(); toast("New game – images reshuffled");
+}
+let modalAsk = false;
+function askReset(skipIfDone){
+  if (shown === 0 || skipIfDone && shown >= N){ resetGame(); return; }
+  $("modal").classList.add("open"); modalAsk = true; $("mOk").focus();
+}
+function closeModal(){ $("modal").classList.remove("open"); modalAsk = false; if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
+
+function toggleFs(){
+  const el = document.documentElement;
+  try {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (el.requestFullscreen) el.requestFullscreen().catch(() => toast("Fullscreen is blocked here – use the browser’s fullscreen (F11)"));
+    else toast("Fullscreen not supported here");
+  } catch(e){ toast("Fullscreen not available"); }
+}
+function toggleBar(){
+  document.body.classList.toggle("kiosk");
+  if (document.body.classList.contains("kiosk")) toast("Bar hidden – press H to show it again");
+}
+function toggleSpot(){
+  spotlightOn = !spotlightOn;
+  if (!spotlightOn && pending) pending.finish(); $("btnSpot").setAttribute("aria-pressed", spotlightOn);
+  toast("Big reveal " + (spotlightOn ? "on" : "off"));
+}
+
+/* ---- events ---- */
+$("btnNext").onclick = next;
+$("btnUndo").onclick = undo;
+$("btnReset").onclick = () => askReset(false);
+$("btnFs").onclick = toggleFs;
+$("btnHide").onclick = toggleBar;
+$("btnSpot").onclick = toggleSpot;
+$("mOk").onclick = () => { closeModal(); resetGame(); };
+$("mCancel").onclick = closeModal;
+$("modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
+
+addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key;
+  if (modalAsk){
+    if (k === "Escape"){ closeModal(); e.preventDefault(); }
+    else if (k === "Enter"){ closeModal(); resetGame(); e.preventDefault(); }
+    return;
+  }
+  if (k === " " || k === "Enter" || k === "ArrowRight" || k === "PageDown"){
+    // only defer to a button the user deliberately focused with the keyboard (Tab); otherwise Space/Enter = next
+    const ae = document.activeElement;
+    if ((k === " " || k === "Enter") && ae && ae.tagName === "BUTTON" && ae.offsetParent !== null && ae.matches(":focus-visible")) return;
+    e.preventDefault(); next();
+  }
+  else if (k === "Backspace" || k === "ArrowLeft" || k === "PageUp"){ e.preventDefault(); undo(); }
+  else if (k === "r" || k === "R"){ askReset(false); }
+  else if (k === "f" || k === "F"){ toggleFs(); }
+  else if (k === "h" || k === "H"){ toggleBar(); }
+  else if (k === "s" || k === "S"){ toggleSpot(); }
+});
+// keep keyboard focus on the page after clicking buttons inside an iframe
+document.addEventListener("click", e => { const b = e.target.closest("button"); if (b && e.detail > 0) b.blur(); });
+
+/* ---- init ---- */
+(function init(){
+  const s = store.get();
+  const ok = s && Array.isArray(s.order) && s.order.length === N &&
+             new Set(s.order).size === N && s.order.every(x => Number.isInteger(x) && x >= 0 && x < N) &&
+             Number.isInteger(s.shown) && s.shown >= 0 && s.shown <= N;
+  if (ok){ order = s.order; shown = s.shown; } else { order = shuffled(); shown = 0; }
+  for (let i = 0; i < shown; i++) fillSlot(i, false);
+  markLatest(shown - 1);
+  layout(); updateUI(); save();
+  IMAGES.forEach((_, k) => { const p = new Image(); p.src = src(k); });   // preload all
+  if (params.get("kiosk") === "1") document.body.classList.add("kiosk");
+  $("btnSpot").setAttribute("aria-pressed", spotlightOn);
+})();
+</script>
+</body>
+</html>
